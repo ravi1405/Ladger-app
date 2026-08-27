@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ledger — Private Expense Tracker</title>
+<meta name="theme-color" content="#121110">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div id="sync-banner" class="sync-banner" hidden></div>
+
+<!-- ===== CONNECT SCREEN (first run only) ===== -->
+<section class="gate" id="gate-connect" hidden>
+  <div class="gate-card">
+    <div class="crest">L</div>
+    <div class="gate-eyebrow">One-time setup</div>
+    <h1 class="gate-title">Connect your ledger</h1>
+    <p class="gate-copy">Paste the Google Apps Script Web App URL from your setup guide. This links the app to your private Google Sheet.</p>
+    <input type="url" id="connect-url" placeholder="https://script.google.com/macros/s/…/exec">
+    <button id="connect-submit" class="btn-gold">Connect</button>
+    <div id="connect-status" class="gate-status"></div>
+  </div>
+</section>
+
+<!-- ===== LOGIN SCREEN ===== -->
+<section class="gate" id="gate-login" hidden>
+  <div class="gate-card">
+    <div class="crest">L</div>
+    <div class="gate-eyebrow">Ledger</div>
+    <h1 class="gate-title">Welcome back</h1>
+    <form id="login-form">
+      <input type="text" id="login-username" placeholder="Username" autocomplete="username" required>
+      <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required>
+      <button type="submit" class="btn-gold" id="login-submit">Sign in</button>
+    </form>
+    <div id="login-status" class="gate-status"></div>
+    <button id="reset-connection" class="gate-link">Change connected sheet</button>
+  </div>
+</section>
+
+<!-- ===== APP ===== -->
+<div id="app" hidden>
+
+<!-- ===== ADD VIEW ===== -->
+<section class="view" id="view-add" data-view="add">
+  <header class="page-head">
+    <div class="eyebrow" id="greeting">Welcome</div>
+    <h1>Log a spend</h1>
+  </header>
+
+  <form id="add-form" class="ledger-card" autocomplete="off">
+    <label class="field">
+      <span class="field-label">Amount</span>
+      <div class="amount-input">
+        <span class="currency-mark" id="currency-mark">₹</span>
+        <input type="number" inputmode="decimal" step="0.01" min="0" id="input-amount" placeholder="0.00" required>
+      </div>
+    </label>
+
+    <label class="field">
+      <span class="field-label">Category</span>
+      <div class="select-wrap">
+        <select id="input-category" required></select>
+      </div>
+    </label>
+
+    <label class="field">
+      <span class="field-label">Description</span>
+      <input type="text" id="input-description" placeholder="What was it for?" maxlength="120">
+    </label>
+
+    <label class="field">
+      <span class="field-label">Date</span>
+      <input type="date" id="input-date" required>
+    </label>
+
+    <button type="submit" class="btn-gold" id="add-submit">Add to ledger</button>
+  </form>
+
+  <div class="today-strip" id="today-strip">
+    <div class="today-strip-label">Today so far</div>
+    <div class="today-strip-amount" id="today-total">0.00</div>
+  </div>
+</section>
+
+<!-- ===== HISTORY VIEW ===== -->
+<section class="view" id="view-history" data-view="history" hidden>
+  <header class="page-head">
+    <div class="eyebrow">All entries</div>
+    <h1>History</h1>
+  </header>
+
+  <div class="history-toolbar">
+    <input type="search" id="search-box" placeholder="Search description or category…">
+    <select id="filter-category"><option value="">All categories</option></select>
+  </div>
+
+  <div id="history-list" class="history-list"></div>
+  <div id="history-empty" class="empty-state" hidden>
+    <div class="empty-stamp">∅</div>
+    <p>Nothing here yet. Entries you log will show up in this ledger page.</p>
+  </div>
+</section>
+
+<!-- ===== ANALYSIS VIEW ===== -->
+<section class="view" id="view-analysis" data-view="analysis" hidden>
+  <header class="page-head">
+    <div class="eyebrow">Overview</div>
+    <h1>Analysis</h1>
+  </header>
+
+  <div class="period-tabs" id="period-tabs">
+    <button class="period-tab active" data-period="month">This month</button>
+    <button class="period-tab" data-period="week">This week</button>
+    <button class="period-tab" data-period="all">All time</button>
+  </div>
+
+  <div class="total-card torn-edge">
+    <div class="total-card-label">Total spent</div>
+    <div class="total-card-amount" id="analysis-total">0.00</div>
+    <div class="total-card-sub" id="analysis-count">0 entries</div>
+  </div>
+
+  <div class="chart-card">
+    <svg id="pie-chart" viewBox="0 0 240 240" width="100%" height="240"></svg>
+    <div id="pie-legend" class="pie-legend"></div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-card-title">By category</div>
+    <div id="bar-list" class="bar-list"></div>
+  </div>
+</section>
+
+<!-- ===== ACCOUNT VIEW ===== -->
+<section class="view" id="view-account" data-view="account" hidden>
+  <header class="page-head">
+    <div class="eyebrow">Manage</div>
+    <h1>Account</h1>
+  </header>
+
+  <div class="ledger-card">
+    <div class="field-label" style="margin-bottom:10px;">Your categories</div>
+    <div id="category-list" class="category-list"></div>
+    <form id="category-form" class="category-add-row">
+      <input type="text" id="input-new-category" placeholder="Add a category…" maxlength="30">
+      <button type="submit" class="btn-stamp">Add</button>
+    </form>
+  </div>
+
+  <div class="ledger-card">
+    <div class="field-label" style="margin-bottom:6px;">Currency symbol</div>
+    <input type="text" id="input-currency" maxlength="3" style="max-width:80px;">
+  </div>
+
+  <div class="ledger-card">
+    <div class="field-label" style="margin-bottom:6px;">Signed in as</div>
+    <p class="hint" id="account-info">—</p>
+    <button id="btn-logout" class="btn-secondary">Sign out</button>
+  </div>
+</section>
+
+<!-- ===== ADMIN VIEW ===== -->
+<section class="view" id="view-admin" data-view="admin" hidden>
+  <header class="page-head">
+    <div class="eyebrow">Administrator</div>
+    <h1>Admin</h1>
+  </header>
+
+  <div class="total-card torn-edge">
+    <div class="total-card-label">Combined spend</div>
+    <div class="total-card-amount" id="admin-total">0.00</div>
+    <div class="total-card-sub" id="admin-count">0 entries · both accounts</div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-card-title">By person</div>
+    <div id="admin-by-user" class="bar-list"></div>
+  </div>
+
+  <div class="ledger-card">
+    <div class="field-label" style="margin-bottom:10px;">All entries</div>
+    <div class="history-toolbar">
+      <select id="admin-filter-user"><option value="">Both accounts</option></select>
+    </div>
+    <div id="admin-history-list" class="history-list"></div>
+  </div>
+
+  <div class="ledger-card">
+    <div class="field-label" style="margin-bottom:10px;">Accounts</div>
+    <div id="admin-users-list"></div>
+  </div>
+</section>
+
+</div><!-- /#app -->
+
+<!-- ===== BOTTOM NAV ===== -->
+<nav class="tabbar" id="tabbar" hidden>
+  <button class="tab active" data-target="add" aria-label="Add">
+    <svg viewBox="0 0 24 24" class="tab-icon"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    <span>Add</span>
+  </button>
+  <button class="tab" data-target="history" aria-label="History">
+    <svg viewBox="0 0 24 24" class="tab-icon"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    <span>History</span>
+  </button>
+  <button class="tab" data-target="analysis" aria-label="Analysis">
+    <svg viewBox="0 0 24 24" class="tab-icon"><path d="M4 20V10M11 20V4M18 20v-7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    <span>Analysis</span>
+  </button>
+  <button class="tab" data-target="account" aria-label="Account">
+    <svg viewBox="0 0 24 24" class="tab-icon"><circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="1.6"/><path d="M5 20c1.5-4 5-5 7-5s5.5 1 7 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    <span>Account</span>
+  </button>
+  <button class="tab" data-target="admin" aria-label="Admin" id="tab-admin" hidden>
+    <svg viewBox="0 0 24 24" class="tab-icon"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+    <span>Admin</span>
+  </button>
+</nav>
+
+<script src="app.js"></script>
+</body>
+</html>
